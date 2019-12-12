@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "gsPolyFontGenerator", "gsPo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "gsMeshSimplify", "gsMeshSimplify\gsMeshSimplify.csproj", "{AF10E05C-1B39-408E-9DFF-EAEF8CC29661}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "gsMeshBoolean", "gsMeshBoolean\gsMeshBoolean.csproj", "{DE37E8E7-B9B6-4F56-A0E9-EF067716B677}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,11 +41,20 @@ Global
 		{AF10E05C-1B39-408E-9DFF-EAEF8CC29661}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AF10E05C-1B39-408E-9DFF-EAEF8CC29661}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AF10E05C-1B39-408E-9DFF-EAEF8CC29661}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DE37E8E7-B9B6-4F56-A0E9-EF067716B677}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE37E8E7-B9B6-4F56-A0E9-EF067716B677}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE37E8E7-B9B6-4F56-A0E9-EF067716B677}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE37E8E7-B9B6-4F56-A0E9-EF067716B677}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D4CBDB03-7722-41F1-AD71-1DAAEB965DAC}
+	EndGlobalSection
+	GlobalSection(MonoDevelopProperties) = preSolution
+		Policies = $0
+		$0.DotNetNamingPolicy = $1
+		$1.DirectoryNamespaceAssociation = PrefixedHierarchical
 	EndGlobalSection
 EndGlobal
