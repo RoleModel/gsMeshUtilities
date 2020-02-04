@@ -7,19 +7,19 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using g3;
 
-namespace gsMeshBoolean
+namespace meshOffset
 {
-    class gsMeshBoolean
+    class meshOffset
     {
 
         static void print_usage()
         {
-            System.Console.WriteLine("gsMeshBoolean v1.0 - Copyright gradientspace / Ryan Schmidt / RoleModel Software 2019");
+            System.Console.WriteLine("meshOffset v1.0 - Copyright gradientspace / Ryan Schmidt / RoleModel Software 2020");
             System.Console.WriteLine("Questions? Comments? www.gradientspace.com or @gradientspace");
-            System.Console.WriteLine("usage: gsMeshBoolean options <inputmesh> <unionmesh>");
+            System.Console.WriteLine("usage: meshOffset options <inputmesh>");
             System.Console.WriteLine("options:");
-            System.Console.WriteLine("  -operation <mode>   : union, intersection, or difference");
             System.Console.WriteLine("  -detail <divisions> : sampling rate for the geometry");
+            System.Console.WriteLine("  -offset <distance>  : distance to offset");
             System.Console.WriteLine("  -output <filename>  : output filename - default is inputmesh.reduced.fmt");
             System.Console.WriteLine("  -v                  : verbose ");
         }
@@ -27,9 +27,8 @@ namespace gsMeshBoolean
         static void Main(string[] args)
         {
             CommandArgumentSet arguments = new CommandArgumentSet();
-            //arguments.Register("-tcount", int.MaxValue);
-            arguments.Register("-operation", "");
             arguments.Register("-detail", 128);
+            arguments.Register("-offset", 2.0f);
             //arguments.Register("-percent", 50.0f);
             arguments.Register("-v", false);
             arguments.Register("-output", "");
@@ -37,20 +36,13 @@ namespace gsMeshBoolean
                 return;
             }
 
-            if (arguments.Filenames.Count != 2) {
+            if (arguments.Filenames.Count != 1) {
                 print_usage();
                 return;
             }
             string inputFilename = arguments.Filenames[0];
             if (! File.Exists(inputFilename) ) {
                 System.Console.WriteLine("File {0} does not exist", inputFilename);
-                return;
-            }
-
-            string inputFilename2 = arguments.Filenames[1];
-            if (!File.Exists(inputFilename))
-            {
-                System.Console.WriteLine("File {0} does not exist", inputFilename2);
                 return;
             }
 
@@ -61,13 +53,14 @@ namespace gsMeshBoolean
                 outputFilename = arguments.Strings["-output"];
             }
 
-            string operationMode = "union";
-            if ( arguments.Saw("-operation")) {
-                operationMode = arguments.Strings["-operation"];
+            float distance = 2.0f;
+            if ( arguments.Saw("-offset"))
+            {
+                distance = arguments.Floats["-offset"];
             }
 
             int granularity = 128;
-            if ( arguments.Saw("-detail"))
+            if (arguments.Saw("-detail"))
             {
                 granularity = arguments.Integers["-detail"];
             }
@@ -94,36 +87,17 @@ namespace gsMeshBoolean
                 return;
             }
 
-            try
-            {
-                DMesh3Builder builder = new DMesh3Builder();
-                IOReadResult result = StandardMeshReader.ReadFile(inputFilename2, ReadOptions.Defaults, builder);
-                if (result.code != IOCode.Ok)
-                {
-                    System.Console.WriteLine("Error reading {0} : {1}", inputFilename2, result.message);
-                    return;
-                }
-                meshes.AddRange(builder.Meshes);
-            }
-            catch (Exception e)
-            {
-                System.Console.WriteLine("Exception reading {0} : {1}", inputFilename, e.Message);
-                return;
-            }
-
             DMesh3 mesh = meshes[0];
             for (int k = 1; k < meshes.Count; ++k)
                 MeshEditor.Append(mesh, meshes[k]);
             if ( mesh.TriangleCount == 0 ) {
                 System.Console.WriteLine("mesh does not contain any triangles");
-                //return;
+                return;
             }
-
-            int originalTriangleCount = meshes[0].TriangleCount + meshes[1].TriangleCount;
 
             if (verbose)
                 System.Console.WriteLine("...completed loading.");
-                System.Console.WriteLine("triangles: {0}", originalTriangleCount);
+                System.Console.WriteLine("triangles: {0}", mesh.TriangleCount);
 
             // repair meshes
 
@@ -135,77 +109,58 @@ namespace gsMeshBoolean
             }
 
             DMesh3 meshA = repairMesh(meshes[0]);
-            DMesh3 meshB = repairMesh(meshes[1]);
-            int postRepairTriangleCount = meshA.TriangleCount + meshB.TriangleCount;
 
             if (verbose)
                 System.Console.WriteLine("...completed repair.");
-                System.Console.WriteLine("triangles: {0}", postRepairTriangleCount);
+                System.Console.WriteLine("triangles: {0}", meshA.TriangleCount);
 
             // start
+
+            double d = distance;
 
             BoundedImplicitFunction3d generateIso(DMesh3 inputMesh)
             {
                 int num_cells = granularity;
                 double cell_size = inputMesh.CachedBounds.MaxDim / num_cells;
+                double allowedOffsetMagnitude = Math.Abs(d);
 
                 MeshSignedDistanceGrid sdf = new MeshSignedDistanceGrid(inputMesh, cell_size);
+                sdf.ExpandBounds = new Vector3d(allowedOffsetMagnitude);
+                sdf.ExactBandWidth = (int)(allowedOffsetMagnitude / cell_size) + 1;
                 sdf.Compute();
 
-                return new DenseGridTrilinearImplicit(sdf);
+                return new CachingDenseGridTrilinearImplicit(sdf);
             }
 
             BoundedImplicitFunction3d isoA = generateIso(meshA);
-            BoundedImplicitFunction3d isoB = generateIso(meshB);
 
 
             BoundedImplicitFunction3d isoOperator = null;
-            if (operationMode == "union")
+            System.Console.WriteLine("distance: {0}", d);
+
+            isoOperator = new ImplicitOffset3d
             {
-                isoOperator = new ImplicitUnion3d
-                {
-                    A = isoA,
-                    B = isoB
-                };
-            } else if (operationMode == "intersection")
-            {
-                isoOperator = new ImplicitIntersection3d
-                {
-                    A = isoA,
-                    B = isoB
-                };
-            } else if (operationMode == "difference")
-            {
-                isoOperator = new ImplicitDifference3d
-                {
-                    A = isoA,
-                    B = isoB
-                };
+                A = isoA,
+                Offset = d
             };
-
-
-            AxisAlignedBox3d box = meshes[0].CachedBounds;
-            AxisAlignedBox3d box2 = meshes[1].CachedBounds;
-
-            AxisAlignedBox3d maximumBounds = new AxisAlignedBox3d(
-                Math.Min(box.Min.x, box2.Min.x), Math.Min(box.Min.y, box2.Min.y), Math.Min(box.Min.z, box2.Min.z),
-                Math.Max(box.Max.x, box2.Max.x), Math.Max(box.Max.y, box2.Max.y), Math.Max(box.Max.z, box2.Max.z)
-            );
 
             MarchingCubes c = new MarchingCubes();
             c.Implicit = isoOperator;
-            c.Bounds = maximumBounds;
+            c.RootMode = MarchingCubes.RootfindingModes.LerpSteps;
+            c.RootModeSteps = 5;                                        // number of iterations
+            c.Bounds = isoOperator.Bounds();
             c.CubeSize = c.Bounds.MaxDim / granularity;
             c.Bounds.Expand(3 * c.CubeSize);
 
             c.Generate();
+            MeshNormals.QuickCompute(c.Mesh);
             DMesh3 outputMesh = c.Mesh;
 
             // end
             System.Console.WriteLine("...completed remeshing.");
             System.Console.WriteLine("triangles: {0}", outputMesh.TriangleCount);
             Reducer r = new Reducer(outputMesh);
-            //r.ReduceToTriangleCount(originalTriangleCount);
+            //r.ReduceToTriangleCount(meshA.TriangleCount);
             r.ReduceToEdgeLength(2 * c.CubeSize);
             System.Console.WriteLine("..completed reducing.");
             System.Console.WriteLine("triangles: {0}", outputMesh.TriangleCount);

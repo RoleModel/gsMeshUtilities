@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "gsMeshSimplify", "gsMeshSim
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "gsMeshBoolean", "gsMeshBoolean\gsMeshBoolean.csproj", "{DE37E8E7-B9B6-4F56-A0E9-EF067716B677}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "meshOffset", "meshOffset\meshOffset.csproj", "{A4DD8994-B2AD-416C-BB76-09DEA5152536}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -45,6 +47,10 @@ Global
 		{DE37E8E7-B9B6-4F56-A0E9-EF067716B677}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DE37E8E7-B9B6-4F56-A0E9-EF067716B677}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DE37E8E7-B9B6-4F56-A0E9-EF067716B677}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4DD8994-B2AD-416C-BB76-09DEA5152536}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4DD8994-B2AD-416C-BB76-09DEA5152536}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4DD8994-B2AD-416C-BB76-09DEA5152536}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4DD8994-B2AD-416C-BB76-09DEA5152536}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
