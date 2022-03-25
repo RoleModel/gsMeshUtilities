@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("meshOffset")]
-[assembly: AssemblyDescription("offseting triangle meshes")]
+[assembly: AssemblyTitle("meshHoleFill")]
+[assembly: AssemblyDescription("filling holes in triangle meshes")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("rolemodelsoftware")]
-[assembly: AssemblyProduct("meshOffset")]
+[assembly: AssemblyProduct("meshHoleFill")]
 [assembly: AssemblyCopyright("Copyright © RoleModel Software, gradientspace 2020")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

@@ -6,6 +6,7 @@ using System.IO;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using g3;
+using gs;
 
 namespace gsMeshBoolean
 {
@@ -144,72 +145,112 @@ namespace gsMeshBoolean
 
             // start
 
-            BoundedImplicitFunction3d generateIso(DMesh3 inputMesh)
+            DMeshAABBTree3 tree = new DMeshAABBTree3(new DMesh3(meshA));
+            tree.Build();
+            MeshProjectionTarget target = new MeshProjectionTarget(tree.Mesh, tree);
+
+            DMesh3 outputMesh = new DMesh3();
+
+            if (false && operationMode == "difference")
             {
-                int num_cells = granularity;
-                double cell_size = inputMesh.CachedBounds.MaxDim / num_cells;
+                MeshMeshCut cutOp = new MeshMeshCut()
+                {
+                    Target = new DMesh3(meshA),
+                    CutMesh = new DMesh3(meshB)
+                };
+                cutOp.Compute();
+                cutOp.RemoveContained();
 
-                MeshSignedDistanceGrid sdf = new MeshSignedDistanceGrid(inputMesh, cell_size);
-                sdf.Compute();
-
-                return new DenseGridTrilinearImplicit(sdf);
+                outputMesh = cutOp.Target;
+                System.Console.WriteLine("...");
             }
-
-            BoundedImplicitFunction3d isoA = generateIso(meshA);
-            BoundedImplicitFunction3d isoB = generateIso(meshB);
-
-
-            BoundedImplicitFunction3d isoOperator = null;
-            if (operationMode == "union")
+            else
             {
-                isoOperator = new ImplicitUnion3d
+                BoundedImplicitFunction3d generateIso(DMesh3 inputMesh)
                 {
-                    A = isoA,
-                    B = isoB
-                };
-            } else if (operationMode == "intersection")
-            {
-                isoOperator = new ImplicitIntersection3d
+                    int num_cells = granularity;
+                    double cell_size = inputMesh.CachedBounds.MaxDim / num_cells;
+                    cell_size = 0.1f;
+
+                    MeshSignedDistanceGrid sdf = new MeshSignedDistanceGrid(inputMesh, cell_size);
+                    sdf.Compute();
+                    
+                    return new DenseGridTrilinearImplicit(sdf);
+                }
+
+                BoundedImplicitFunction3d isoA = generateIso(meshA);
+                BoundedImplicitFunction3d isoB = generateIso(meshB);
+                System.Console.WriteLine("...completed generating SDFs.");
+
+
+                BoundedImplicitFunction3d isoOperator = null;
+                AxisAlignedBox3d maximumBounds = meshes[0].CachedBounds;
+                if (operationMode == "union")
                 {
-                    A = isoA,
-                    B = isoB
-                };
-            } else if (operationMode == "difference")
-            {
-                isoOperator = new ImplicitDifference3d
+                    isoOperator = new ImplicitUnion3d
+                    {
+                        A = isoA,
+                        B = isoB
+                    };
+                    AxisAlignedBox3d box = meshes[0].CachedBounds;
+                    AxisAlignedBox3d box2 = meshes[1].CachedBounds;
+
+                    maximumBounds = new AxisAlignedBox3d(
+                        Math.Min(box.Min.x, box2.Min.x), Math.Min(box.Min.y, box2.Min.y), Math.Min(box.Min.z, box2.Min.z),
+                        Math.Max(box.Max.x, box2.Max.x), Math.Max(box.Max.y, box2.Max.y), Math.Max(box.Max.z, box2.Max.z)
+                    );
+                    originalTriangleCount = meshes[0].TriangleCount + meshes[1].TriangleCount;
+                }
+                else if (operationMode == "intersection")
                 {
-                    A = isoA,
-                    B = isoB
+                    isoOperator = new ImplicitIntersection3d
+                    {
+                        A = isoA,
+                        B = isoB
+                    };
+                    originalTriangleCount = meshes[0].TriangleCount;
+                }
+                else if (operationMode == "difference")
+                {
+                    isoOperator = new ImplicitDifference3d
+                    {
+                        A = isoA,
+                        B = isoB
+                    };
+                    originalTriangleCount = meshes[0].TriangleCount;
                 };
+
+                MarchingCubes c = new MarchingCubes();
+                c.Implicit = isoOperator;
+                c.Bounds = maximumBounds;
+                c.CubeSize = c.Bounds.MaxDim / granularity;
+                c.CubeSize = 0.1f;
+                c.Bounds.Expand(3 * c.CubeSize);
+
+                c.Generate();
+                outputMesh = c.Mesh;
+
+                // end
+                System.Console.WriteLine("...completed remeshing.");
+                System.Console.WriteLine("triangles: {0}", outputMesh.TriangleCount);
+                Reducer r = new Reducer(outputMesh);
+                r.SetProjectionTarget(target);
+                r.ProjectionMode = Reducer.TargetProjectionMode.Inline;
+                //r.ReduceToTriangleCount(originalTriangleCount);
+                r.ReduceToEdgeLength(2 * c.CubeSize);
+                System.Console.WriteLine("..completed reducing.");
+                System.Console.WriteLine("triangles: {0}", outputMesh.TriangleCount);
+
+                //RemesherPro rP = new RemesherPro(outputMesh);
+                //rP.PreventNormalFlips = true;
+                //rP.SetTargetEdgeLength(0.07);
+                //rP.SmoothSpeedT = 0.1;
+                //rP.SetProjectionTarget(MeshProjectionTarget.Auto(outputMesh));
+
+
+                MeshRepairOrientation orient = new MeshRepairOrientation(outputMesh);
+                orient.OrientComponents();
             };
-
-
-            AxisAlignedBox3d box = meshes[0].CachedBounds;
-            AxisAlignedBox3d box2 = meshes[1].CachedBounds;
-
-            AxisAlignedBox3d maximumBounds = new AxisAlignedBox3d(
-                Math.Min(box.Min.x, box2.Min.x), Math.Min(box.Min.y, box2.Min.y), Math.Min(box.Min.z, box2.Min.z),
-                Math.Max(box.Max.x, box2.Max.x), Math.Max(box.Max.y, box2.Max.y), Math.Max(box.Max.z, box2.Max.z)
-            );
-
-            MarchingCubes c = new MarchingCubes();
-            c.Implicit = isoOperator;
-            c.Bounds = maximumBounds;
-            c.CubeSize = c.Bounds.MaxDim / granularity;
-            c.Bounds.Expand(3 * c.CubeSize);
-
-            c.Generate();
-            DMesh3 outputMesh = c.Mesh;
-
-            // end
-            System.Console.WriteLine("...completed remeshing.");
-            System.Console.WriteLine("triangles: {0}", outputMesh.TriangleCount);
-            Reducer r = new Reducer(outputMesh);
-            //r.ReduceToTriangleCount(originalTriangleCount);
-            r.ReduceToEdgeLength(2 * c.CubeSize);
-            System.Console.WriteLine("..completed reducing.");
-            System.Console.WriteLine("triangles: {0}", outputMesh.TriangleCount);
-
 
             if (verbose)
                 System.Console.WriteLine("done!");

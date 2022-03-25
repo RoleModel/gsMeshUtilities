@@ -6,42 +6,47 @@ using System.IO;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using g3;
+using gs;
+using System.Json;
 
-namespace meshOffset
+namespace meshHoleFill
 {
-    class meshOffset
+    class meshHoleFill
     {
 
         static void print_usage()
         {
-            System.Console.WriteLine("meshOffset v1.0 - Copyright gradientspace / Ryan Schmidt / RoleModel Software 2020");
+            System.Console.WriteLine("meshHoleFill v1.0 - Copyright gradientspace / Ryan Schmidt / RoleModel Software 2020");
             System.Console.WriteLine("Questions? Comments? www.gradientspace.com or @gradientspace");
-            System.Console.WriteLine("usage: meshOffset options <inputmesh>");
+            System.Console.WriteLine("usage: meshHoleFill options -selection <json> <inputmesh>");
             System.Console.WriteLine("options:");
-            System.Console.WriteLine("  -detail <divisions> : sampling rate for the geometry");
-            System.Console.WriteLine("  -offset <distance>  : distance to offset");
-            System.Console.WriteLine("  -output <filename>  : output filename - default is inputmesh.reduced.fmt");
-            System.Console.WriteLine("  -v                  : verbose ");
+            System.Console.WriteLine("  -detail <length>       : desired edge length for geometry fill");
+            System.Console.WriteLine("  -selection <filename>  : JSON array of face indexes to delete");
+            System.Console.WriteLine("  -displacement <string> : CSV floats representing displacement vector premultiplied");
+            System.Console.WriteLine("  -output <filename>     : output filename - default is inputmesh.reduced.fmt");
+            System.Console.WriteLine("  -v                     : verbose ");
         }
 
         static void Main(string[] args)
         {
             CommandArgumentSet arguments = new CommandArgumentSet();
-            arguments.Register("-detail", 128);
-            arguments.Register("-offset", 2.0f);
-            //arguments.Register("-percent", 50.0f);
             arguments.Register("-v", false);
+            arguments.Register("-detail", 0.5f);
+            arguments.Register("-selection", "");
+            arguments.Register("-displacement", "");
             arguments.Register("-output", "");
             if (arguments.Parse(args) == false) {
                 return;
             }
 
-            if (arguments.Filenames.Count != 1) {
+            if (arguments.Filenames.Count != 1)
+            {
                 print_usage();
                 return;
             }
             string inputFilename = arguments.Filenames[0];
-            if (! File.Exists(inputFilename) ) {
+            if (!File.Exists(inputFilename))
+            {
                 System.Console.WriteLine("File {0} does not exist", inputFilename);
                 return;
             }
@@ -53,16 +58,43 @@ namespace meshOffset
                 outputFilename = arguments.Strings["-output"];
             }
 
-            float distance = 2.0f;
-            if ( arguments.Saw("-offset"))
+            int[] selectionIndexes = { };
+            if (arguments.Saw("-selection"))
             {
-                distance = arguments.Floats["-offset"];
+                string indexString = System.IO.File.ReadAllText(arguments.Strings["-selection"]);
+
+                JsonValue json = JsonValue.Parse(indexString);
+                selectionIndexes = new int[json.Count];
+
+                for (var i = 0; i < json.Count; i++)
+                {
+                    int value = json[i];
+                    selectionIndexes[i] = value;
+                }
             }
 
-            int granularity = 128;
+            if(selectionIndexes.Length == 0)
+            {
+                System.Console.WriteLine("Selection required");
+                print_usage();
+                return;
+            }
+
+            double offsetDistance = 1.0;
+            Vector3d offsetDirection = Vector3d.Zero;
+            if (arguments.Saw("-displacement"))
+            {
+                string[] displacementStrings = arguments.Strings["-displacement"].Split(new[]{','});
+
+                offsetDirection.x = Double.Parse(displacementStrings[0]);
+                offsetDirection.y = Double.Parse(displacementStrings[1]);
+                offsetDirection.z = Double.Parse(displacementStrings[2]);
+            }
+
+            float meshResolution = 0.5f;
             if (arguments.Saw("-detail"))
             {
-                granularity = arguments.Integers["-detail"];
+                meshResolution = arguments.Floats["-detail"];
             }
 
             bool verbose = false;
@@ -82,7 +114,7 @@ namespace meshOffset
                 System.Console.WriteLine("Exception reading {0} : {1}", inputFilename, e.Message);
                 return;
             }
-            if ( meshes.Count == 0 ) {
+            if (meshes.Count == 0) {
                 System.Console.WriteLine("file did not contain any valid meshes");
                 return;
             }
@@ -90,81 +122,50 @@ namespace meshOffset
             DMesh3 mesh = meshes[0];
             for (int k = 1; k < meshes.Count; ++k)
                 MeshEditor.Append(mesh, meshes[k]);
-            if ( mesh.TriangleCount == 0 ) {
+            if (mesh.TriangleCount == 0) {
                 System.Console.WriteLine("mesh does not contain any triangles");
                 return;
             }
 
             if (verbose)
                 System.Console.WriteLine("...completed loading.");
-                System.Console.WriteLine("triangles: {0}", mesh.TriangleCount);
+            System.Console.WriteLine("triangles: {0}", mesh.TriangleCount);
 
-            // repair meshes
-
-            DMesh3 repairMesh(DMesh3 inputMesh)
-            {
-                gs.MeshAutoRepair repair = new gs.MeshAutoRepair(inputMesh);
-                repair.Apply();
-                return inputMesh;
-            }
-
-            DMesh3 meshA = repairMesh(meshes[0]);
+            DMesh3 meshA = meshes[0];
 
             if (verbose)
                 System.Console.WriteLine("...completed repair.");
                 System.Console.WriteLine("triangles: {0}", meshA.TriangleCount);
 
             // start
+            if (verbose)
+                System.Console.WriteLine("selected: {0}", selectionIndexes.Length);
 
-            double d = distance;
+            MeshRepairOrientation orient = new MeshRepairOrientation(meshA);
+            orient.OrientComponents();
 
-            BoundedImplicitFunction3d generateIso(DMesh3 inputMesh)
+            MeshRegionBoundaryLoops loops = new MeshRegionBoundaryLoops(meshA, selectionIndexes);
+
+            MeshEditor editor = new MeshEditor(meshA);
+            editor.RemoveTriangles(selectionIndexes, false);
+
+            System.Console.WriteLine("triangles: {0}", meshA.TriangleCount);
+
+            foreach (EdgeLoop loop in loops)
             {
-                int num_cells = granularity;
-                double cell_size = inputMesh.CachedBounds.MaxDim / num_cells;
-                double allowedOffsetMagnitude = Math.Abs(d);
-
-                MeshSignedDistanceGrid sdf = new MeshSignedDistanceGrid(inputMesh, cell_size);
-                sdf.ExpandBounds = new Vector3d(allowedOffsetMagnitude);
-                sdf.ExactBandWidth = (int)(allowedOffsetMagnitude / cell_size) + 1;
-                sdf.Compute();
-
-                return new CachingDenseGridTrilinearImplicit(sdf);
+                SmoothedHoleFill filler = new SmoothedHoleFill(meshA, loop);
+                filler.TargetEdgeLength = meshResolution;
+                filler.ConstrainToHoleInterior = true;
+                filler.SmoothSolveIterations = 3;
+                filler.OffsetDirection = offsetDirection;
+                filler.OffsetDistance = offsetDistance;
+                filler.Apply();
             }
 
-            BoundedImplicitFunction3d isoA = generateIso(meshA);
+            orient = new MeshRepairOrientation(meshA);
+            orient.OrientComponents();
 
-
-            BoundedImplicitFunction3d isoOperator = null;
-            System.Console.WriteLine("distance: {0}", d);
-
-            isoOperator = new ImplicitOffset3d
-            {
-                A = isoA,
-                Offset = d
-            };
-
-            MarchingCubes c = new MarchingCubes();
-            c.Implicit = isoOperator;
-            c.RootMode = MarchingCubes.RootfindingModes.LerpSteps;
-            c.RootModeSteps = 5;                                        // number of iterations
-            c.Bounds = isoOperator.Bounds();
-            c.CubeSize = c.Bounds.MaxDim / granularity;
-            c.Bounds.Expand(3 * c.CubeSize);
-
-            c.Generate();
-            MeshNormals.QuickCompute(c.Mesh);
-            DMesh3 outputMesh = c.Mesh;
-
-            // end
-            System.Console.WriteLine("...completed remeshing.");
-            System.Console.WriteLine("triangles: {0}", outputMesh.TriangleCount);
-            Reducer r = new Reducer(outputMesh);
-            //r.ReduceToTriangleCount(meshA.TriangleCount);
-            r.ReduceToEdgeLength(2 * c.CubeSize);
-            System.Console.WriteLine("..completed reducing.");
-            System.Console.WriteLine("triangles: {0}", outputMesh.TriangleCount);
-
+            System.Console.WriteLine("triangles: {0}", meshA.TriangleCount);
 
             if (verbose)
                 System.Console.WriteLine("done!");
@@ -173,7 +174,7 @@ namespace meshOffset
                 WriteOptions options = WriteOptions.Defaults;
                 options.bWriteBinary = true;
                 IOWriteResult wresult =
-                    StandardMeshWriter.WriteMesh(outputFilename, outputMesh, options);
+                    StandardMeshWriter.WriteMesh(outputFilename, meshA, options);
                 if (wresult.code != IOCode.Ok) {
                     System.Console.WriteLine("Error writing {0} : {1}", inputFilename, wresult.message);
                     return;
