@@ -22,3 +22,10 @@ gsPolyFontGenerator/bin/
 gsMeshSimplify/obj/
 gsMeshSimplify/bin/
 gsMeshSimplify/gsMeshSimplify.csproj.user
+gsMeshBoolean/obj/
+gsMeshBoolean/bin/
+gsMeshBoolean/gsMeshBoolean.csproj.user
+meshHoleFill/obj/
+meshHoleFill/bin/
+meshOffset/obj/
+meshOffset/bin/
